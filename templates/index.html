@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Emotion Detector</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Emotion Detector</h1>
+    <p>Upload an image or use your webcam to predict emotions!</p>
+
+    <div class="upload-section">
+      <input type="file" id="fileInput" accept="image/*" hidden>
+      <button id="uploadBtn" class="btn">Choose Image</button>
+      <button id="webcamBtn" class="btn secondary">Use Webcam</button>
+      <button id="captureBtn" class="btn capture" style="display:none;">Capture</button>
+    </div>
+
+    <div class="preview">
+      <video id="webcam" autoplay playsinline style="display:none;"></video>
+      <canvas id="canvas" style="display:none;"></canvas>
+      <img id="previewImage" src="" alt="" />
+    </div>
+
+    <div class="result">
+      <h2 id="prediction"></h2>
+    </div>
+  </div>
+
+ <script>
+window.onload = function() {
+  const fileInput = document.getElementById('fileInput');
+  const uploadBtn = document.getElementById('uploadBtn');
+  const webcamBtn = document.getElementById('webcamBtn');
+  const captureBtn = document.getElementById('captureBtn');
+  const video = document.getElementById('webcam');
+  const canvas = document.getElementById('canvas');
+  const previewImage = document.getElementById('previewImage');
+
+  let streaming = false;
+
+  // --- Upload image ---
+  uploadBtn.addEventListener('click', () => {
+    if (!fileInput) {
+      alert("File input not found.");
+      return;
+    }
+    fileInput.click();
+  });
+
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      previewImage.src = reader.result;
+      previewImage.style.display = 'block';
+      stopWebcam();
+      send(reader.result);
+    };
+    reader.readAsDataURL(file);
+  });
+
+  // --- Use webcam ---
+  webcamBtn.addEventListener('click', async () => {
+    if (streaming) {
+      stopWebcam();
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      video.srcObject = stream;
+      video.style.display = 'block';
+      captureBtn.style.display = 'inline-block';
+      previewImage.style.display = 'none';
+      streaming = true;
+    } catch (e) {
+      alert('Webcam access denied or not available.');
+    }
+  });
+
+  // --- Capture image ---
+  captureBtn.addEventListener('click', () => {
+    if (!streaming) return;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    const dataURL = canvas.toDataURL('image/jpeg');
+    previewImage.src = dataURL;
+    previewImage.style.display = 'block';
+    send(dataURL);
+  });
+
+  // --- Stop webcam ---
+  function stopWebcam() {
+    if (video.srcObject) {
+      video.srcObject.getTracks().forEach(track => track.stop());
+      video.srcObject = null;
+    }
+    video.style.display = 'none';
+    captureBtn.style.display = 'none';
+    streaming = false;
+  }
+
+  // --- Send to backend ---
+  function send(dataURL) {
+    fetch('/predict', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: dataURL })
+    })
+      .then(r => r.json())
+      .then(d => {
+        document.getElementById('prediction').innerText =
+          'Predicted Emotion: ' + d['prediction'];
+      })
+      .catch(e => alert('Error: ' + e));
+  }
+};
+</script>
+
